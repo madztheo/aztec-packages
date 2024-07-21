@@ -25,22 +25,32 @@ fn main() {
     }
     // Android
     else if target_os == "android" {
+        let android_abi = if env::var("CARGO_CFG_TARGET_ARCH").unwrap() == "arm" {
+            "armeabi-v7a"
+        } else {
+            "arm64-v8a"
+        };
+
         dst = Config::new("../cpp")
-        .generator("Ninja")
-        .configure_arg("-DCMAKE_BUILD_TYPE=RelWithAssert")
-        .configure_arg("-DANDROID_ABI=arm64-v8a")
-        .configure_arg("-DANDROID_PLATFORM=android-33")
-        .configure_arg(&format!("--toolchain={}/ndk/{}/build/cmake/android.toolchain.cmake", env!("ANDROID_HOME"), env!("NDK_VERSION")))
-        .build_target("bb")
-        .build();
-    } 
+            .generator("Ninja")
+            .configure_arg("-DCMAKE_BUILD_TYPE=RelWithAssert")
+            .configure_arg(&format!("-DANDROID_ABI={}", android_abi))
+            .configure_arg("-DANDROID_PLATFORM=android-33")
+            .configure_arg(&format!(
+                "--toolchain={}/ndk/{}/build/cmake/android.toolchain.cmake",
+                env!("ANDROID_HOME"),
+                env!("NDK_VERSION")
+            ))
+            .build_target("bb")
+            .build();
+    }
     // MacOS and other platforms
     else {
         dst = Config::new("../cpp")
-        .generator("Ninja")
-        .configure_arg("-DCMAKE_BUILD_TYPE=RelWithAssert")
-        .build_target("bb")
-        .build();
+            .generator("Ninja")
+            .configure_arg("-DCMAKE_BUILD_TYPE=RelWithAssert")
+            .build_target("bb")
+            .build();
     }
 
     // Add the library search path for Rust to find during linking.
@@ -59,16 +69,42 @@ fn main() {
     let mut builder = bindgen::Builder::default();
 
     if target_os == "android" {
+        let android_abi = if env::var("CARGO_CFG_TARGET_ARCH").unwrap() == "arm" {
+            "armeabi-v7a"
+        } else {
+            "arm64-v8a"
+        };
+
         builder = builder
-        // Add the include path for headers.
-        .clang_args([
-            "-std=c++20",
-            "-xc++",
-            &format!("-I{}/build/include", dst.display()),
-            &format!("-I{}/ndk/{}/toolchains/llvm/prebuilt/{}/sysroot/usr/include/c++/v1", env!("ANDROID_HOME"), env!("NDK_VERSION"), env!("HOST_TAG")),
-            &format!("-I{}/ndk/{}/toolchains/llvm/prebuilt/{}/sysroot/usr/include", env!("ANDROID_HOME"), env!("NDK_VERSION"), env!("HOST_TAG")),
-            &format!("-I{}/ndk/{}/toolchains/llvm/prebuilt/{}/sysroot/usr/include/aarch64-linux-android", env!("ANDROID_HOME"), env!("NDK_VERSION"), env!("HOST_TAG"))
-        ]);
+            // Add the include path for headers.
+            .clang_args([
+                "-std=c++20",
+                "-xc++",
+                &format!("-I{}/build/include", dst.display()),
+                &format!(
+                    "-I{}/ndk/{}/toolchains/llvm/prebuilt/{}/sysroot/usr/include/c++/v1",
+                    env!("ANDROID_HOME"),
+                    env!("NDK_VERSION"),
+                    env!("HOST_TAG")
+                ),
+                &format!(
+                    "-I{}/ndk/{}/toolchains/llvm/prebuilt/{}/sysroot/usr/include",
+                    env!("ANDROID_HOME"),
+                    env!("NDK_VERSION"),
+                    env!("HOST_TAG")
+                ),
+                &format!(
+                    "-I{}/ndk/{}/toolchains/llvm/prebuilt/{}/sysroot/usr/include/{}",
+                    env!("ANDROID_HOME"),
+                    env!("NDK_VERSION"),
+                    env!("HOST_TAG"),
+                    if android_abi == "armeabi-v7a" {
+                        "arm-linux-androideabi"
+                    } else {
+                        "aarch64-linux-android"
+                    }
+                ),
+            ]);
     } else if target_os == "ios" {
         builder = builder
         // Add the include path for headers.
@@ -91,12 +127,12 @@ fn main() {
             ]);
     } else {
         builder = builder
-        // Add the include path for headers.
-        .clang_args([
-            "-std=c++20",
-            "-xc++",
-            &format!("-I{}/build/include", dst.display())
-        ]);
+            // Add the include path for headers.
+            .clang_args([
+                "-std=c++20",
+                "-xc++",
+                &format!("-I{}/build/include", dst.display()),
+            ]);
     }
 
     let bindings = builder
